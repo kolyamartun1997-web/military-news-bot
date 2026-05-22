@@ -6,6 +6,7 @@ import feedparser
 import threading
 import time
 from datetime import datetime
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -16,6 +17,7 @@ SOURCES = {
     "Генштаб ЗСУ": "https://www.mil.gov.ua/rss.xml",
 }
 
+DONATE_URL = "https://send.monobank.ua/jar/3PzEGicc2b"
 SUBSCRIBERS_FILE = "subscribers.json"
 
 def load_subscribers():
@@ -38,8 +40,13 @@ def get_news(url, count=3):
             link = entry.get("link", "")
             news.append(f"📰 {title}\n🔗 {link}")
         return news
-    except Exception as e:
+    except:
         return []
+
+def donate_keyboard():
+    keyboard = InlineKeyboardMarkup()
+    keyboard.add(InlineKeyboardButton("💛 Підтримати бота", url=DONATE_URL))
+    return keyboard
 
 def send_morning_news():
     while True:
@@ -54,7 +61,7 @@ def send_morning_news():
                         text += f"📡 *{source}*:\n" + "\n\n".join(news) + "\n\n"
                 for chat_id in subscribers:
                     try:
-                        bot.send_message(chat_id, text, parse_mode="Markdown", disable_web_page_preview=True)
+                        bot.send_message(chat_id, text, parse_mode="Markdown", disable_web_page_preview=True, reply_markup=donate_keyboard())
                     except Exception as e:
                         print(f"Помилка надсилання до {chat_id}: {e}")
             time.sleep(60)
@@ -72,8 +79,17 @@ def send_welcome(message):
         "/pravda — Українська правда (війна)\n"
         "/subscribe — підписатись на щоранкові новини о 7:00\n"
         "/unsubscribe — відписатись від новин\n"
+        "/donate — підтримати розвиток бота\n"
     )
     bot.reply_to(message, text)
+
+@bot.message_handler(commands=["donate"])
+def donate(message):
+    bot.send_message(
+        message.chat.id,
+        "💛 Дякую за підтримку! Кожна гривня допомагає розвивати бота 🇺🇦",
+        reply_markup=donate_keyboard()
+    )
 
 @bot.message_handler(commands=["subscribe"])
 def subscribe(message):
@@ -105,6 +121,7 @@ def all_news(message):
         if news:
             text = f"📡 *{source}*:\n\n" + "\n\n".join(news)
             bot.send_message(message.chat.id, text, parse_mode="Markdown", disable_web_page_preview=True)
+    bot.send_message(message.chat.id, "💛 Подобається бот? Підтримай розвиток!", reply_markup=donate_keyboard())
 
 @bot.message_handler(commands=["genshtab"])
 def genshtab_news(message):
