@@ -10,6 +10,7 @@ from datetime import datetime
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
+ALARM_API_KEY = os.environ.get("ALARM_API_KEY")
 bot = telebot.TeleBot(BOT_TOKEN)
 
 SOURCES = {
@@ -22,10 +23,14 @@ DONATE_URL = "https://send.monobank.ua/jar/3PzEGicc2b"
 BOT_LINK = "https://t.me/ua_military_news_bot"
 ALERTS_MAP = "https://alerts.in.ua"
 SUBSCRIBERS_FILE = "subscribers.json"
+ALARM_SUBSCRIBERS_FILE = "alarm_subscribers.json"
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
+
+# Зберігаємо активні тривоги щоб не дублювати сповіщення
+active_alerts = {}
 
 def load_subscribers():
     try:
@@ -36,6 +41,17 @@ def load_subscribers():
 
 def save_subscribers(subscribers):
     with open(SUBSCRIBERS_FILE, "w") as f:
+        json.dump(subscribers, f)
+
+def load_alarm_subscribers():
+    try:
+        with open(ALARM_SUBSCRIBERS_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return []
+
+def save_alarm_subscribers(subscribers):
+    with open(ALARM_SUBSCRIBERS_FILE, "w") as f:
         json.dump(subscribers, f)
 
 def get_news(url, count=3):
@@ -59,6 +75,68 @@ def get_news(url, count=3):
         print(f"[ERROR] Загальна помилка при парсингу {url}: {e}")
         return []
 
+def get_alerts():
+    try:
+        headers = {"Authorization": ALARM_API_KEY}
+        response = requests.get("https://api.ukrainealarm.com/api/v3/alerts", headers=headers, timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        print(f"[ERROR] Помилка отримання тривог: {e}")
+        return []
+
+def check_alerts():
+    global active_alerts
+    while True:
+        try:
+            alerts_data = get_alerts()
+            current_alerts = {}
+
+            for region in alerts_data:
+                region_name = region.get("regionName", "Невідомий регіон")
+                region_id = region.get("regionId", "")
+                alerts = region.get("activeAlerts", [])
+
+                for alert in alerts:
+                    alert_type = alert.get("type", "")
+                    if alert_type == "AIR":
+                        current_alerts[region_id] = region_name
+
+            # Нові тривоги — сповіщаємо
+            for region_id, region_name in current_alerts.items():
+                if region_id not in active_alerts:
+                    subscribers = load_alarm_subscribers()
+                    for chat_id in subscribers:
+                        try:
+                            bot.send_message(
+                                chat_id,
+                                f"🚨 *ПОВІТРЯНА ТРИВОГА!*\n\n📍 {region_name}\n\n⚠️ Негайно перейдіть до укриття!",
+                                parse_mode="Markdown"
+                            )
+                        except Exception as e:
+                            print(f"Помилка надсилання тривоги до {chat_id}: {e}")
+
+            # Відбій тривоги — сповіщаємо
+            for region_id, region_name in active_alerts.items():
+                if region_id not in current_alerts:
+                    subscribers = load_alarm_subscribers()
+                    for chat_id in subscribers:
+                        try:
+                            bot.send_message(
+                                chat_id,
+                                f"✅ *ВІДБІЙ ТРИВОГИ*\n\n📍 {region_name}\n\nМожна виходити з укриття.",
+                                parse_mode="Markdown"
+                            )
+                        except Exception as e:
+                            print(f"Помилка надсилання відбою до {chat_id}: {e}")
+
+            active_alerts = current_alerts
+
+        except Exception as e:
+            print(f"[ERROR] Помилка перевірки тривог: {e}")
+
+        time.sleep(30)  # Перевіряємо кожні 30 секунд
+
 def donate_keyboard():
     keyboard = InlineKeyboardMarkup()
     keyboard.add(InlineKeyboardButton("💛 Підтримати бота", url=DONATE_URL))
@@ -68,7 +146,8 @@ def main_keyboard():
     keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
     keyboard.row(KeyboardButton("📰 Всі новини"), KeyboardButton("🪖 Армія Inform"))
     keyboard.row(KeyboardButton("🌐 Google News"), KeyboardButton("📋 Українська правда"))
-    keyboard.row(KeyboardButton("✅ Підписатись"), KeyboardButton("❌ Відписатись"))
+    keyboard.row(KeyboardButton("🚨 Підписатись на тривоги"), KeyboardButton("🔕 Відписатись від тривог"))
+    keyboard.row(KeyboardButton("✅ Підписатись на новини"), KeyboardButton("❌ Відписатись від новин"))
     keyboard.row(KeyboardButton("🗺️ Карта тривог"), KeyboardButton("📤 Поділитись ботом"))
     keyboard.row(KeyboardButton("🚀 Головне меню"), KeyboardButton("💛 Підтримати бота"))
     return keyboard
@@ -96,10 +175,11 @@ def send_morning_news():
 def welcome_message(chat_id):
     text = (
         "👋 *Привіт! Я бот військових новин України* 🇺🇦\n\n"
-        "Я збираю свіжі новини з перевірених джерел:\n"
+        "Я збираю свіжі новини з перевірених джерел та сповіщаю про повітряні тривоги:\n"
         "• 📰 Українська правда\n"
         "• 🪖 Армія Inform\n"
-        "• 🌐 Google News (війна України)\n\n"
+        "• 🌐 Google News\n"
+        "• 🚨 Сповіщення про повітряні тривоги\n\n"
         "Обери що тебе цікавить 👇"
     )
     bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=main_keyboard())
@@ -159,7 +239,29 @@ def pravda_news(message):
         bot.send_message(message.chat.id, "❌ Новини недоступні. Спробуйте пізніше.")
     bot.send_message(message.chat.id, "💛 Підтримай бота!", reply_markup=donate_keyboard())
 
-@bot.message_handler(func=lambda m: m.text == "✅ Підписатись")
+@bot.message_handler(func=lambda m: m.text == "🚨 Підписатись на тривоги")
+def subscribe_alarms(message):
+    subscribers = load_alarm_subscribers()
+    chat_id = message.chat.id
+    if chat_id not in subscribers:
+        subscribers.append(chat_id)
+        save_alarm_subscribers(subscribers)
+        bot.reply_to(message, "🚨 Ти підписався на сповіщення про повітряні тривоги по всій Україні!")
+    else:
+        bot.reply_to(message, "ℹ️ Ти вже підписаний на тривоги!")
+
+@bot.message_handler(func=lambda m: m.text == "🔕 Відписатись від тривог")
+def unsubscribe_alarms(message):
+    subscribers = load_alarm_subscribers()
+    chat_id = message.chat.id
+    if chat_id in subscribers:
+        subscribers.remove(chat_id)
+        save_alarm_subscribers(subscribers)
+        bot.reply_to(message, "🔕 Ти відписався від сповіщень про тривоги.")
+    else:
+        bot.reply_to(message, "ℹ️ Ти не був підписаний на тривоги.")
+
+@bot.message_handler(func=lambda m: m.text == "✅ Підписатись на новини")
 def subscribe(message):
     subscribers = load_subscribers()
     chat_id = message.chat.id
@@ -170,7 +272,7 @@ def subscribe(message):
     else:
         bot.reply_to(message, "ℹ️ Ти вже підписаний!")
 
-@bot.message_handler(func=lambda m: m.text == "❌ Відписатись")
+@bot.message_handler(func=lambda m: m.text == "❌ Відписатись від новин")
 def unsubscribe(message):
     subscribers = load_subscribers()
     chat_id = message.chat.id
@@ -202,4 +304,7 @@ if __name__ == "__main__":
     thread = threading.Thread(target=send_morning_news)
     thread.daemon = True
     thread.start()
+    alarm_thread = threading.Thread(target=check_alerts)
+    alarm_thread.daemon = True
+    alarm_thread.start()
     bot.infinity_polling()
