@@ -6,7 +6,7 @@ import feedparser
 import threading
 import time
 from datetime import datetime
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -48,6 +48,14 @@ def donate_keyboard():
     keyboard.add(InlineKeyboardButton("💛 Підтримати бота", url=DONATE_URL))
     return keyboard
 
+def main_keyboard():
+    keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.row(KeyboardButton("📰 Всі новини"), KeyboardButton("🪖 Генштаб ЗСУ"))
+    keyboard.row(KeyboardButton("⚔️ Мілітарний"), KeyboardButton("📋 Українська правда"))
+    keyboard.row(KeyboardButton("✅ Підписатись"), KeyboardButton("❌ Відписатись"))
+    keyboard.row(KeyboardButton("💛 Підтримати бота"))
+    return keyboard
+
 def send_morning_news():
     while True:
         now = datetime.now()
@@ -70,28 +78,53 @@ def send_morning_news():
 
 @bot.message_handler(commands=["start", "help"])
 def send_welcome(message):
-    text = (
-        "👋 Привіт! Я бот військових новин України.\n\n"
-        "📋 Команди:\n"
-        "/news — останні новини з усіх джерел\n"
-        "/genshtab — зведення Генштабу ЗСУ\n"
-        "/militarny — новини Мілітарного\n"
-        "/pravda — Українська правда (війна)\n"
-        "/subscribe — підписатись на щоранкові новини о 7:00\n"
-        "/unsubscribe — відписатись від новин\n"
-        "/donate — підтримати розвиток бота\n"
-    )
-    bot.reply_to(message, text)
+    text = "👋 Привіт! Я бот військових новин України.\n\nОбери що тебе цікавить 👇"
+    bot.send_message(message.chat.id, text, reply_markup=main_keyboard())
 
-@bot.message_handler(commands=["donate"])
-def donate(message):
-    bot.send_message(
-        message.chat.id,
-        "💛 Дякую за підтримку! Кожна гривня допомагає розвивати бота 🇺🇦",
-        reply_markup=donate_keyboard()
-    )
+@bot.message_handler(func=lambda m: m.text == "📰 Всі новини")
+def all_news(message):
+    bot.reply_to(message, "⏳ Збираю новини...")
+    for source, url in SOURCES.items():
+        news = get_news(url, 3)
+        if news:
+            text = f"📡 *{source}*:\n\n" + "\n\n".join(news)
+            bot.send_message(message.chat.id, text, parse_mode="Markdown", disable_web_page_preview=True)
+    bot.send_message(message.chat.id, "💛 Подобається бот? Підтримай розвиток!", reply_markup=donate_keyboard())
 
-@bot.message_handler(commands=["subscribe"])
+@bot.message_handler(func=lambda m: m.text == "🪖 Генштаб ЗСУ")
+def genshtab_news(message):
+    bot.reply_to(message, "⏳ Завантажую зведення Генштабу...")
+    news = get_news(SOURCES["Генштаб ЗСУ"], 5)
+    if news:
+        text = "🪖 *Генштаб ЗСУ*:\n\n" + "\n\n".join(news)
+        bot.send_message(message.chat.id, text, parse_mode="Markdown", disable_web_page_preview=True)
+    else:
+        bot.send_message(message.chat.id, "❌ Новини недоступні.")
+    bot.send_message(message.chat.id, "💛 Підтримай бота!", reply_markup=donate_keyboard())
+
+@bot.message_handler(func=lambda m: m.text == "⚔️ Мілітарний")
+def militarny_news(message):
+    bot.reply_to(message, "⏳ Завантажую новини Мілітарного...")
+    news = get_news(SOURCES["Мілітарний"], 5)
+    if news:
+        text = "⚔️ *Мілітарний*:\n\n" + "\n\n".join(news)
+        bot.send_message(message.chat.id, text, parse_mode="Markdown", disable_web_page_preview=True)
+    else:
+        bot.send_message(message.chat.id, "❌ Новини недоступні.")
+    bot.send_message(message.chat.id, "💛 Підтримай бота!", reply_markup=donate_keyboard())
+
+@bot.message_handler(func=lambda m: m.text == "📋 Українська правда")
+def pravda_news(message):
+    bot.reply_to(message, "⏳ Завантажую новини УП...")
+    news = get_news(SOURCES["Українська правда (війна)"], 5)
+    if news:
+        text = "📰 *Українська правда (війна)*:\n\n" + "\n\n".join(news)
+        bot.send_message(message.chat.id, text, parse_mode="Markdown", disable_web_page_preview=True)
+    else:
+        bot.send_message(message.chat.id, "❌ Новини недоступні.")
+    bot.send_message(message.chat.id, "💛 Підтримай бота!", reply_markup=donate_keyboard())
+
+@bot.message_handler(func=lambda m: m.text == "✅ Підписатись")
 def subscribe(message):
     subscribers = load_subscribers()
     chat_id = message.chat.id
@@ -102,7 +135,7 @@ def subscribe(message):
     else:
         bot.reply_to(message, "ℹ️ Ти вже підписаний!")
 
-@bot.message_handler(commands=["unsubscribe"])
+@bot.message_handler(func=lambda m: m.text == "❌ Відписатись")
 def unsubscribe(message):
     subscribers = load_subscribers()
     chat_id = message.chat.id
@@ -113,45 +146,13 @@ def unsubscribe(message):
     else:
         bot.reply_to(message, "ℹ️ Ти не був підписаний.")
 
-@bot.message_handler(commands=["news"])
-def all_news(message):
-    bot.reply_to(message, "⏳ Збираю новини...")
-    for source, url in SOURCES.items():
-        news = get_news(url, 3)
-        if news:
-            text = f"📡 *{source}*:\n\n" + "\n\n".join(news)
-            bot.send_message(message.chat.id, text, parse_mode="Markdown", disable_web_page_preview=True)
-    bot.send_message(message.chat.id, "💛 Подобається бот? Підтримай розвиток!", reply_markup=donate_keyboard())
-
-@bot.message_handler(commands=["genshtab"])
-def genshtab_news(message):
-    bot.reply_to(message, "⏳ Завантажую зведення Генштабу...")
-    news = get_news(SOURCES["Генштаб ЗСУ"], 5)
-    if news:
-        text = "🪖 *Генштаб ЗСУ*:\n\n" + "\n\n".join(news)
-        bot.send_message(message.chat.id, text, parse_mode="Markdown", disable_web_page_preview=True)
-    else:
-        bot.reply_to(message, "❌ Новини недоступні.")
-
-@bot.message_handler(commands=["militarny"])
-def militarny_news(message):
-    bot.reply_to(message, "⏳ Завантажую новини Мілітарного...")
-    news = get_news(SOURCES["Мілітарний"], 5)
-    if news:
-        text = "⚔️ *Мілітарний*:\n\n" + "\n\n".join(news)
-        bot.send_message(message.chat.id, text, parse_mode="Markdown", disable_web_page_preview=True)
-    else:
-        bot.reply_to(message, "❌ Новини недоступні.")
-
-@bot.message_handler(commands=["pravda"])
-def pravda_news(message):
-    bot.reply_to(message, "⏳ Завантажую новини УП...")
-    news = get_news(SOURCES["Українська правда (війна)"], 5)
-    if news:
-        text = "📰 *Українська правда (війна)*:\n\n" + "\n\n".join(news)
-        bot.send_message(message.chat.id, text, parse_mode="Markdown", disable_web_page_preview=True)
-    else:
-        bot.reply_to(message, "❌ Новини недоступні.")
+@bot.message_handler(func=lambda m: m.text == "💛 Підтримати бота")
+def donate(message):
+    bot.send_message(
+        message.chat.id,
+        "💛 Дякую за підтримку! Кожна гривня допомагає розвивати бота 🇺🇦",
+        reply_markup=donate_keyboard()
+    )
 
 if __name__ == "__main__":
     print("Бот військових новин запущений...")
