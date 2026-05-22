@@ -18,6 +18,8 @@ SOURCES = {
 }
 
 DONATE_URL = "https://send.monobank.ua/jar/3PzEGicc2b"
+BOT_LINK = "https://t.me/ua_military_news_bot"
+ALERTS_MAP = "https://alerts.in.ua"
 SUBSCRIBERS_FILE = "subscribers.json"
 
 def load_subscribers():
@@ -53,6 +55,7 @@ def main_keyboard():
     keyboard.row(KeyboardButton("📰 Всі новини"), KeyboardButton("🪖 Генштаб ЗСУ"))
     keyboard.row(KeyboardButton("⚔️ Мілітарний"), KeyboardButton("📋 Українська правда"))
     keyboard.row(KeyboardButton("✅ Підписатись"), KeyboardButton("❌ Відписатись"))
+    keyboard.row(KeyboardButton("🗺️ Карта тривог"), KeyboardButton("📤 Поділитись ботом"))
     keyboard.row(KeyboardButton("💛 Підтримати бота"))
     return keyboard
 
@@ -145,6 +148,22 @@ def unsubscribe(message):
         bot.reply_to(message, "❌ Ти відписався від щоранкових новин.")
     else:
         bot.reply_to(message, "ℹ️ Ти не був підписаний.")
+
+@bot.message_handler(func=lambda m: m.text == "🗺️ Карта тривог")
+def alerts_map(message):
+    keyboard = InlineKeyboardMarkup()
+    keyboard.add(InlineKeyboardButton("🗺️ Відкрити карту тривог", url=ALERTS_MAP))
+    bot.send_message(message.chat.id, "🚨 Карта повітряних тривог України в реальному часі:", reply_markup=keyboard)
+
+@bot.message_handler(func=lambda m: m.text == "📤 Поділитись ботом")
+def share_bot(message):
+    keyboard = InlineKeyboardMarkup()
+    keyboard.add(InlineKeyboardButton("📤 Поділитись ботом", url=f"https://t.me/share/url?url={BOT_LINK}&text=Бот%20військових%20новин%20України%20🇺🇦"))
+    bot.send_message(
+        message.chat.id,
+        f"📤 Поділись ботом з друзями!\n\n👉 {BOT_LINK}",
+        reply_markup=keyboard
+    )
 
 @bot.message_handler(func=lambda m: m.text == "💛 Підтримати бота")
 def donate(message):
