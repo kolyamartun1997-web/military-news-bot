@@ -13,8 +13,8 @@ bot = telebot.TeleBot(BOT_TOKEN)
 
 SOURCES = {
     "Українська правда (війна)": "https://www.pravda.com.ua/rss/view_war/",
-    "Мілітарний": "https://militarny.com/feed/",
-    "Генштаб ЗСУ": "https://www.mil.gov.ua/rss.xml",
+    "Армія Inform": "https://armyinform.com.ua/feed/",
+    "Defence Express": "https://defence-ua.com/feed/",
 }
 
 DONATE_URL = "https://send.monobank.ua/jar/3PzEGicc2b"
@@ -52,8 +52,8 @@ def donate_keyboard():
 
 def main_keyboard():
     keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
-    keyboard.row(KeyboardButton("📰 Всі новини"), KeyboardButton("🪖 Генштаб ЗСУ"))
-    keyboard.row(KeyboardButton("⚔️ Мілітарний"), KeyboardButton("📋 Українська правда"))
+    keyboard.row(KeyboardButton("📰 Всі новини"), KeyboardButton("🪖 Армія Inform"))
+    keyboard.row(KeyboardButton("⚔️ Defence Express"), KeyboardButton("📋 Українська правда"))
     keyboard.row(KeyboardButton("✅ Підписатись"), KeyboardButton("❌ Відписатись"))
     keyboard.row(KeyboardButton("🗺️ Карта тривог"), KeyboardButton("📤 Поділитись ботом"))
     keyboard.row(KeyboardButton("💛 Підтримати бота"))
@@ -94,23 +94,23 @@ def all_news(message):
             bot.send_message(message.chat.id, text, parse_mode="Markdown", disable_web_page_preview=True)
     bot.send_message(message.chat.id, "💛 Подобається бот? Підтримай розвиток!", reply_markup=donate_keyboard())
 
-@bot.message_handler(func=lambda m: m.text == "🪖 Генштаб ЗСУ")
-def genshtab_news(message):
-    bot.reply_to(message, "⏳ Завантажую зведення Генштабу...")
-    news = get_news(SOURCES["Генштаб ЗСУ"], 5)
+@bot.message_handler(func=lambda m: m.text == "🪖 Армія Inform")
+def armyinform_news(message):
+    bot.reply_to(message, "⏳ Завантажую новини Армія Inform...")
+    news = get_news(SOURCES["Армія Inform"], 5)
     if news:
-        text = "🪖 *Генштаб ЗСУ*:\n\n" + "\n\n".join(news)
+        text = "🪖 *Армія Inform*:\n\n" + "\n\n".join(news)
         bot.send_message(message.chat.id, text, parse_mode="Markdown", disable_web_page_preview=True)
     else:
         bot.send_message(message.chat.id, "❌ Новини недоступні.")
     bot.send_message(message.chat.id, "💛 Підтримай бота!", reply_markup=donate_keyboard())
 
-@bot.message_handler(func=lambda m: m.text == "⚔️ Мілітарний")
-def militarny_news(message):
-    bot.reply_to(message, "⏳ Завантажую новини Мілітарного...")
-    news = get_news(SOURCES["Мілітарний"], 5)
+@bot.message_handler(func=lambda m: m.text == "⚔️ Defence Express")
+def defence_news(message):
+    bot.reply_to(message, "⏳ Завантажую новини Defence Express...")
+    news = get_news(SOURCES["Defence Express"], 5)
     if news:
-        text = "⚔️ *Мілітарний*:\n\n" + "\n\n".join(news)
+        text = "⚔️ *Defence Express*:\n\n" + "\n\n".join(news)
         bot.send_message(message.chat.id, text, parse_mode="Markdown", disable_web_page_preview=True)
     else:
         bot.send_message(message.chat.id, "❌ Новини недоступні.")
@@ -159,19 +159,11 @@ def alerts_map(message):
 def share_bot(message):
     keyboard = InlineKeyboardMarkup()
     keyboard.add(InlineKeyboardButton("📤 Поділитись ботом", url=f"https://t.me/share/url?url={BOT_LINK}&text=Бот%20військових%20новин%20України%20🇺🇦"))
-    bot.send_message(
-        message.chat.id,
-        f"📤 Поділись ботом з друзями!\n\n👉 {BOT_LINK}",
-        reply_markup=keyboard
-    )
+    bot.send_message(message.chat.id, f"📤 Поділись ботом з друзями!\n\n👉 {BOT_LINK}", reply_markup=keyboard)
 
 @bot.message_handler(func=lambda m: m.text == "💛 Підтримати бота")
 def donate(message):
-    bot.send_message(
-        message.chat.id,
-        "💛 Дякую за підтримку! Кожна гривня допомагає розвивати бота 🇺🇦",
-        reply_markup=donate_keyboard()
-    )
+    bot.send_message(message.chat.id, "💛 Дякую за підтримку! Кожна гривня допомагає розвивати бота 🇺🇦", reply_markup=donate_keyboard())
 
 if __name__ == "__main__":
     print("Бот військових новин запущений...")
