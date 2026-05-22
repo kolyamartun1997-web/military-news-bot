@@ -12,11 +12,8 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeybo
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 bot = telebot.TeleBot(BOT_TOKEN)
 
-SOURCES = {
-    "Українська правда (війна)": "https://www.pravda.com.ua/rss/view_war/",
-    "Армія Inform": "https://armyinform.com.ua/feed/",
-    "Defence Express": "https://www.mil.in.ua/uk/feed/",
-}
+"Мілітарний": "https://mil.in.ua/uk/feed/",
+"Укрінформ (оборона)": "https://www.ukrinform.ua/rss/rubric-ato.xml",
 
 DONATE_URL = "https://send.monobank.ua/jar/3PzEGicc2b"
 BOT_LINK = "https://t.me/ua_military_news_bot"
