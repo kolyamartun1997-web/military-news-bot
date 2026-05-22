@@ -12,8 +12,11 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeybo
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 bot = telebot.TeleBot(BOT_TOKEN)
 
-"Мілітарний": "https://mil.in.ua/uk/feed/",
-"Укрінформ (оборона)": "https://www.ukrinform.ua/rss/rubric-ato.xml",
+SOURCES = {
+    "Українська правда (війна)": "https://www.pravda.com.ua/rss/view_war/",
+    "Армія Inform": "https://armyinform.com.ua/feed/",
+    "Укрінформ (оборона)": "https://www.ukrinform.ua/rss/rubric-ato.xml",
+}
 
 DONATE_URL = "https://send.monobank.ua/jar/3PzEGicc2b"
 BOT_LINK = "https://t.me/ua_military_news_bot"
@@ -64,7 +67,7 @@ def donate_keyboard():
 def main_keyboard():
     keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
     keyboard.row(KeyboardButton("📰 Всі новини"), KeyboardButton("🪖 Армія Inform"))
-    keyboard.row(KeyboardButton("⚔️ Defence Express"), KeyboardButton("📋 Українська правда"))
+    keyboard.row(KeyboardButton("🛡️ Укрінформ"), KeyboardButton("📋 Українська правда"))
     keyboard.row(KeyboardButton("✅ Підписатись"), KeyboardButton("❌ Відписатись"))
     keyboard.row(KeyboardButton("🗺️ Карта тривог"), KeyboardButton("📤 Поділитись ботом"))
     keyboard.row(KeyboardButton("🚀 Головне меню"), KeyboardButton("💛 Підтримати бота"))
@@ -96,7 +99,7 @@ def welcome_message(chat_id):
         "Я збираю свіжі новини з перевірених джерел:\n"
         "• 📰 Українська правда\n"
         "• 🪖 Армія Inform\n"
-        "• ⚔️ Defence Express\n\n"
+        "• 🛡️ Укрінформ (оборона)\n\n"
         "Обери що тебе цікавить 👇"
     )
     bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=main_keyboard())
@@ -134,12 +137,12 @@ def armyinform_news(message):
         bot.send_message(message.chat.id, "❌ Новини недоступні. Спробуйте пізніше.")
     bot.send_message(message.chat.id, "💛 Підтримай бота!", reply_markup=donate_keyboard())
 
-@bot.message_handler(func=lambda m: m.text == "⚔️ Defence Express")
-def defence_news(message):
-    bot.reply_to(message, "⏳ Завантажую новини Defence Express...")
-    news = get_news(SOURCES["Defence Express"], 5)
+@bot.message_handler(func=lambda m: m.text == "🛡️ Укрінформ")
+def ukrinform_news(message):
+    bot.reply_to(message, "⏳ Завантажую новини Укрінформ...")
+    news = get_news(SOURCES["Укрінформ (оборона)"], 5)
     if news:
-        text = "⚔️ *Defence Express*:\n\n" + "\n\n".join(news)
+        text = "🛡️ *Укрінформ (оборона)*:\n\n" + "\n\n".join(news)
         bot.send_message(message.chat.id, text, parse_mode="Markdown", disable_web_page_preview=True)
     else:
         bot.send_message(message.chat.id, "❌ Новини недоступні. Спробуйте пізніше.")
