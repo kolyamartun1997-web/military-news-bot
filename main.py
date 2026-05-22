@@ -5,6 +5,7 @@ import telebot
 import feedparser
 import threading
 import time
+import requests
 from datetime import datetime
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 
@@ -22,6 +23,10 @@ BOT_LINK = "https://t.me/ua_military_news_bot"
 ALERTS_MAP = "https://alerts.in.ua"
 SUBSCRIBERS_FILE = "subscribers.json"
 
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+}
+
 def load_subscribers():
     try:
         with open(SUBSCRIBERS_FILE, "r") as f:
@@ -35,14 +40,23 @@ def save_subscribers(subscribers):
 
 def get_news(url, count=3):
     try:
-        feed = feedparser.parse(url)
+        response = requests.get(url, headers=HEADERS, timeout=15)
+        response.raise_for_status()
+        feed = feedparser.parse(response.content)
+        if not feed.entries:
+            print(f"[WARNING] Немає записів у фіді: {url}")
+            return []
         news = []
         for entry in feed.entries[:count]:
             title = entry.get("title", "Без назви")
             link = entry.get("link", "")
             news.append(f"📰 {title}\n🔗 {link}")
         return news
-    except:
+    except requests.exceptions.RequestException as e:
+        print(f"[ERROR] Помилка запиту до {url}: {e}")
+        return []
+    except Exception as e:
+        print(f"[ERROR] Загальна помилка при парсингу {url}: {e}")
         return []
 
 def donate_keyboard():
@@ -56,7 +70,7 @@ def main_keyboard():
     keyboard.row(KeyboardButton("⚔️ Defence Express"), KeyboardButton("📋 Українська правда"))
     keyboard.row(KeyboardButton("✅ Підписатись"), KeyboardButton("❌ Відписатись"))
     keyboard.row(KeyboardButton("🗺️ Карта тривог"), KeyboardButton("📤 Поділитись ботом"))
-    keyboard.row(KeyboardButton("💛 Підтримати бота"))
+    keyboard.row(KeyboardButton("🚀 Головне меню"), KeyboardButton("💛 Підтримати бота"))
     return keyboard
 
 def send_morning_news():
@@ -79,19 +93,37 @@ def send_morning_news():
         else:
             time.sleep(30)
 
+def welcome_message(chat_id):
+    text = (
+        "👋 *Привіт! Я бот військових новин України* 🇺🇦\n\n"
+        "Я збираю свіжі новини з перевірених джерел:\n"
+        "• 📰 Українська правда\n"
+        "• 🪖 Армія Inform\n"
+        "• ⚔️ Defence Express\n\n"
+        "Обери що тебе цікавить 👇"
+    )
+    bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=main_keyboard())
+
 @bot.message_handler(commands=["start", "help"])
 def send_welcome(message):
-    text = "👋 Привіт! Я бот військових новин України.\n\nОбери що тебе цікавить 👇"
-    bot.send_message(message.chat.id, text, reply_markup=main_keyboard())
+    welcome_message(message.chat.id)
+
+@bot.message_handler(func=lambda m: m.text == "🚀 Головне меню")
+def go_home(message):
+    welcome_message(message.chat.id)
 
 @bot.message_handler(func=lambda m: m.text == "📰 Всі новини")
 def all_news(message):
     bot.reply_to(message, "⏳ Збираю новини...")
+    found_any = False
     for source, url in SOURCES.items():
         news = get_news(url, 3)
         if news:
+            found_any = True
             text = f"📡 *{source}*:\n\n" + "\n\n".join(news)
             bot.send_message(message.chat.id, text, parse_mode="Markdown", disable_web_page_preview=True)
+    if not found_any:
+        bot.send_message(message.chat.id, "❌ Наразі новини недоступні. Спробуйте пізніше.")
     bot.send_message(message.chat.id, "💛 Подобається бот? Підтримай розвиток!", reply_markup=donate_keyboard())
 
 @bot.message_handler(func=lambda m: m.text == "🪖 Армія Inform")
@@ -102,7 +134,7 @@ def armyinform_news(message):
         text = "🪖 *Армія Inform*:\n\n" + "\n\n".join(news)
         bot.send_message(message.chat.id, text, parse_mode="Markdown", disable_web_page_preview=True)
     else:
-        bot.send_message(message.chat.id, "❌ Новини недоступні.")
+        bot.send_message(message.chat.id, "❌ Новини недоступні. Спробуйте пізніше.")
     bot.send_message(message.chat.id, "💛 Підтримай бота!", reply_markup=donate_keyboard())
 
 @bot.message_handler(func=lambda m: m.text == "⚔️ Defence Express")
@@ -113,7 +145,7 @@ def defence_news(message):
         text = "⚔️ *Defence Express*:\n\n" + "\n\n".join(news)
         bot.send_message(message.chat.id, text, parse_mode="Markdown", disable_web_page_preview=True)
     else:
-        bot.send_message(message.chat.id, "❌ Новини недоступні.")
+        bot.send_message(message.chat.id, "❌ Новини недоступні. Спробуйте пізніше.")
     bot.send_message(message.chat.id, "💛 Підтримай бота!", reply_markup=donate_keyboard())
 
 @bot.message_handler(func=lambda m: m.text == "📋 Українська правда")
@@ -124,7 +156,7 @@ def pravda_news(message):
         text = "📰 *Українська правда (війна)*:\n\n" + "\n\n".join(news)
         bot.send_message(message.chat.id, text, parse_mode="Markdown", disable_web_page_preview=True)
     else:
-        bot.send_message(message.chat.id, "❌ Новини недоступні.")
+        bot.send_message(message.chat.id, "❌ Новини недоступні. Спробуйте пізніше.")
     bot.send_message(message.chat.id, "💛 Підтримай бота!", reply_markup=donate_keyboard())
 
 @bot.message_handler(func=lambda m: m.text == "✅ Підписатись")
