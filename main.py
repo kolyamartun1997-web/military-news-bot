@@ -15,7 +15,7 @@ bot = telebot.TeleBot(BOT_TOKEN)
 SOURCES = {
     "Українська правда (війна)": "https://www.pravda.com.ua/rss/view_war/",
     "Армія Inform": "https://armyinform.com.ua/feed/",
-    "Defence Express": "https://defence-ua.com/feed/",
+    "Defence Express": "https://www.mil.in.ua/uk/feed/",
 }
 
 DONATE_URL = "https://send.monobank.ua/jar/3PzEGicc2b"
