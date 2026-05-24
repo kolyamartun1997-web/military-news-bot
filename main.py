@@ -29,8 +29,7 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 
-# Зберігаємо активні тривоги щоб не дублювати сповіщення
-active_alerts = {}
+active_alerts = set()
 
 def load_subscribers():
     try:
@@ -68,17 +67,14 @@ def get_news(url, count=3):
             link = entry.get("link", "")
             news.append(f"📰 {title}\n🔗 {link}")
         return news
-    except requests.exceptions.RequestException as e:
-        print(f"[ERROR] Помилка запиту до {url}: {e}")
-        return []
     except Exception as e:
-        print(f"[ERROR] Загальна помилка при парсингу {url}: {e}")
+        print(f"[ERROR] Помилка парсингу {url}: {e}")
         return []
 
 def get_alerts():
     try:
-        headers = {"Authorization": ALARM_API_KEY}
-        response = requests.get("https://api.ukrainealarm.com/api/v3/alerts", headers=headers, timeout=10)
+        headers = {"X-API-Key": ALARM_API_KEY}
+        response = requests.get("https://api.alerts.in.ua/v1/alerts/active.json", headers=headers, timeout=10)
         response.raise_for_status()
         return response.json()
     except Exception as e:
@@ -90,52 +86,49 @@ def check_alerts():
     while True:
         try:
             alerts_data = get_alerts()
-            current_alerts = {}
+            current_alerts = set()
 
-            for region in alerts_data:
-                region_name = region.get("regionName", "Невідомий регіон")
-                region_id = region.get("regionId", "")
-                alerts = region.get("activeAlerts", [])
+            if isinstance(alerts_data, list):
+                for alert in alerts_data:
+                    region = alert.get("location_title", "Невідома область")
+                    alert_type = alert.get("alert_type", "")
+                    if alert_type == "air_raid":
+                        current_alerts.add(region)
 
-                for alert in alerts:
-                    alert_type = alert.get("type", "")
-                    if alert_type == "AIR":
-                        current_alerts[region_id] = region_name
+            # Нові тривоги
+            new_alerts = current_alerts - active_alerts
+            for region in new_alerts:
+                subscribers = load_alarm_subscribers()
+                for chat_id in subscribers:
+                    try:
+                        bot.send_message(
+                            chat_id,
+                            f"🚨 *ПОВІТРЯНА ТРИВОГА!*\n\n📍 {region}\n\n⚠️ Негайно перейдіть до укриття!",
+                            parse_mode="Markdown"
+                        )
+                    except Exception as e:
+                        print(f"Помилка надсилання тривоги: {e}")
 
-            # Нові тривоги — сповіщаємо
-            for region_id, region_name in current_alerts.items():
-                if region_id not in active_alerts:
-                    subscribers = load_alarm_subscribers()
-                    for chat_id in subscribers:
-                        try:
-                            bot.send_message(
-                                chat_id,
-                                f"🚨 *ПОВІТРЯНА ТРИВОГА!*\n\n📍 {region_name}\n\n⚠️ Негайно перейдіть до укриття!",
-                                parse_mode="Markdown"
-                            )
-                        except Exception as e:
-                            print(f"Помилка надсилання тривоги до {chat_id}: {e}")
-
-            # Відбій тривоги — сповіщаємо
-            for region_id, region_name in active_alerts.items():
-                if region_id not in current_alerts:
-                    subscribers = load_alarm_subscribers()
-                    for chat_id in subscribers:
-                        try:
-                            bot.send_message(
-                                chat_id,
-                                f"✅ *ВІДБІЙ ТРИВОГИ*\n\n📍 {region_name}\n\nМожна виходити з укриття.",
-                                parse_mode="Markdown"
-                            )
-                        except Exception as e:
-                            print(f"Помилка надсилання відбою до {chat_id}: {e}")
+            # Відбій тривоги
+            ended_alerts = active_alerts - current_alerts
+            for region in ended_alerts:
+                subscribers = load_alarm_subscribers()
+                for chat_id in subscribers:
+                    try:
+                        bot.send_message(
+                            chat_id,
+                            f"✅ *ВІДБІЙ ТРИВОГИ*\n\n📍 {region}\n\nМожна виходити з укриття.",
+                            parse_mode="Markdown"
+                        )
+                    except Exception as e:
+                        print(f"Помилка надсилання відбою: {e}")
 
             active_alerts = current_alerts
 
         except Exception as e:
             print(f"[ERROR] Помилка перевірки тривог: {e}")
 
-        time.sleep(30)  # Перевіряємо кожні 30 секунд
+        time.sleep(30)
 
 def donate_keyboard():
     keyboard = InlineKeyboardMarkup()
@@ -175,7 +168,7 @@ def send_morning_news():
 def welcome_message(chat_id):
     text = (
         "👋 *Привіт! Я бот військових новин України* 🇺🇦\n\n"
-        "Я збираю свіжі новини з перевірених джерел та сповіщаю про повітряні тривоги:\n"
+        "Я збираю свіжі новини та сповіщаю про повітряні тривоги:\n"
         "• 📰 Українська правда\n"
         "• 🪖 Армія Inform\n"
         "• 🌐 Google News\n"
