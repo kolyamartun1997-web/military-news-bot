@@ -73,7 +73,7 @@ def get_news(url, count=3):
 
 def get_alerts():
     try:
-        headers = {"X-API-Key": ALARM_API_KEY}
+        headers = {"Authorization": ALARM_API_KEY}
         response = requests.get("https://api.alerts.in.ua/v1/alerts/active.json", headers=headers, timeout=10)
         response.raise_for_status()
         return response.json()
