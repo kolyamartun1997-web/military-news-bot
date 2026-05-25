@@ -74,7 +74,7 @@ def get_news(url, count=3):
 def get_alerts():
     try:
         headers = {"Authorization": ALARM_API_KEY}
-        response = requests.get("https://api.alerts.in.ua/v1/alerts/active.json", headers=headers, timeout=10)
+        response = requests.get("https://api.ukrainealarm.com/api/v3/alerts", headers=headers, timeout=10)
         response.raise_for_status()
         return response.json()
     except Exception as e:
@@ -89,11 +89,12 @@ def check_alerts():
             current_alerts = set()
 
             if isinstance(alerts_data, list):
-                for alert in alerts_data:
-                    region = alert.get("location_title", "Невідома область")
-                    alert_type = alert.get("alert_type", "")
-                    if alert_type == "air_raid":
-                        current_alerts.add(region)
+                for region_data in alerts_data:
+                    region = region_data.get("regionName", "Невідома область")
+                    active = region_data.get("activeAlerts", [])
+                    for alert in active:
+                        if alert.get("type") == "AIR":
+                            current_alerts.add(region)
 
             # Нові тривоги
             new_alerts = current_alerts - active_alerts
