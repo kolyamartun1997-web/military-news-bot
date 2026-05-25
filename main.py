@@ -7,6 +7,7 @@ import threading
 import time
 import requests
 from datetime import datetime
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -30,6 +31,20 @@ HEADERS = {
 }
 
 active_alerts = set()
+
+# Простий веб-сервер щоб Render не падав
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running!")
+    def log_message(self, format, *args):
+        pass
+
+def run_web_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    server.serve_forever()
 
 def load_subscribers():
     try:
@@ -87,7 +102,6 @@ def check_alerts():
         try:
             alerts_data = get_alerts()
             current_alerts = set()
-
             if isinstance(alerts_data, list):
                 for region_data in alerts_data:
                     region = region_data.get("regionName", "Невідома область")
@@ -95,40 +109,25 @@ def check_alerts():
                     for alert in active:
                         if alert.get("type") == "AIR":
                             current_alerts.add(region)
-
-            # Нові тривоги
             new_alerts = current_alerts - active_alerts
             for region in new_alerts:
                 subscribers = load_alarm_subscribers()
                 for chat_id in subscribers:
                     try:
-                        bot.send_message(
-                            chat_id,
-                            f"🚨 *ПОВІТРЯНА ТРИВОГА!*\n\n📍 {region}\n\n⚠️ Негайно перейдіть до укриття!",
-                            parse_mode="Markdown"
-                        )
+                        bot.send_message(chat_id, f"🚨 *ПОВІТРЯНА ТРИВОГА!*\n\n📍 {region}\n\n⚠️ Негайно перейдіть до укриття!", parse_mode="Markdown")
                     except Exception as e:
                         print(f"Помилка надсилання тривоги: {e}")
-
-            # Відбій тривоги
             ended_alerts = active_alerts - current_alerts
             for region in ended_alerts:
                 subscribers = load_alarm_subscribers()
                 for chat_id in subscribers:
                     try:
-                        bot.send_message(
-                            chat_id,
-                            f"✅ *ВІДБІЙ ТРИВОГИ*\n\n📍 {region}\n\nМожна виходити з укриття.",
-                            parse_mode="Markdown"
-                        )
+                        bot.send_message(chat_id, f"✅ *ВІДБІЙ ТРИВОГИ*\n\n📍 {region}\n\nМожна виходити з укриття.", parse_mode="Markdown")
                     except Exception as e:
                         print(f"Помилка надсилання відбою: {e}")
-
             active_alerts = current_alerts
-
         except Exception as e:
             print(f"[ERROR] Помилка перевірки тривог: {e}")
-
         time.sleep(30)
 
 def donate_keyboard():
@@ -240,7 +239,7 @@ def subscribe_alarms(message):
     if chat_id not in subscribers:
         subscribers.append(chat_id)
         save_alarm_subscribers(subscribers)
-        bot.reply_to(message, "🚨 Ти підписався на сповіщення про повітряні тривоги по всій Україні!")
+        bot.reply_to(message, "🚨 Ти підписався на сповіщення про повітряні тривоги!")
     else:
         bot.reply_to(message, "ℹ️ Ти вже підписаний на тривоги!")
 
@@ -295,9 +294,12 @@ def donate(message):
 
 if __name__ == "__main__":
     print("Бот військових новин запущений...")
-    thread = threading.Thread(target=send_morning_news)
-    thread.daemon = True
-    thread.start()
+    web_thread = threading.Thread(target=run_web_server)
+    web_thread.daemon = True
+    web_thread.start()
+    morning_thread = threading.Thread(target=send_morning_news)
+    morning_thread.daemon = True
+    morning_thread.start()
     alarm_thread = threading.Thread(target=check_alerts)
     alarm_thread.daemon = True
     alarm_thread.start()
